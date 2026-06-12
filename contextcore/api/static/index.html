@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ContextCore</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --border: #2c3038;
+    --text: #e6e6e6;
+    --muted: #8b919c;
+    --accent: #5b8cff;
+    --user-bubble: #2b3a5e;
+    --assistant-bubble: #1f242d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  header p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .msg {
+    max-width: 70%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    line-height: 1.5;
+    font-size: 14px;
+    white-space: pre-wrap;
+  }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--user-bubble);
+  }
+  .msg.assistant {
+    align-self: flex-start;
+    background: var(--assistant-bubble);
+    border: 1px solid var(--border);
+  }
+  .msg.error {
+    align-self: flex-start;
+    background: #3a1f24;
+    border: 1px solid #6e2b35;
+    color: #ff9aa6;
+  }
+  .meta {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .meta .tag {
+    background: rgba(91, 140, 255, 0.12);
+    border: 1px solid rgba(91, 140, 255, 0.3);
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+  #composer {
+    display: flex;
+    gap: 8px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+  }
+  #composer input {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+  }
+  #composer input:focus {
+    border-color: var(--accent);
+  }
+  #composer button {
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 20px;
+    cursor: pointer;
+  }
+  #composer button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .thinking {
+    color: var(--muted);
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>ContextCore</h1>
+    <p>Adaptive enterprise RAG — ask a question about the indexed documents</p>
+  </header>
+
+  <div id="chat"></div>
+
+  <form id="composer">
+    <input id="input" type="text" placeholder="Ask a question..." autocomplete="off" />
+    <button id="send" type="submit">Send</button>
+  </form>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const form = document.getElementById("composer");
+    const input = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
+
+    let sessionId = localStorage.getItem("contextcore_session_id");
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem("contextcore_session_id", sessionId);
+    }
+
+    function addMessage(role, text) {
+      const el = document.createElement("div");
+      el.className = `msg ${role}`;
+      el.textContent = text;
+      chat.appendChild(el);
+      chat.scrollTop = chat.scrollHeight;
+      return el;
+    }
+
+    function addMeta(container, confidence, citations) {
+      const meta = document.createElement("div");
+      meta.className = "meta";
+
+      const conf = document.createElement("span");
+      conf.className = "tag";
+      conf.textContent = `confidence: ${confidence.toFixed(2)}`;
+      meta.appendChild(conf);
+
+      if (citations && citations.length) {
+        const cit = document.createElement("span");
+        cit.className = "tag";
+        cit.textContent = `citations: [${citations.join(", ")}]`;
+        meta.appendChild(cit);
+      }
+
+      container.appendChild(meta);
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const query = input.value.trim();
+      if (!query) return;
+
+      addMessage("user", query);
+      input.value = "";
+      sendBtn.disabled = true;
+
+      const thinking = addMessage("assistant thinking", "Thinking...");
+
+      try {
+        const res = await fetch("/api/v1/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, session_id: sessionId }),
+        });
+        const data = await res.json();
+
+        thinking.classList.remove("thinking");
+
+        if (!res.ok) {
+          thinking.className = "msg error";
+          thinking.textContent = data.detail || "Something went wrong.";
+        } else {
+          thinking.textContent = data.answer;
+          addMeta(thinking, data.confidence, data.citations);
+        }
+      } catch (err) {
+        thinking.className = "msg error";
+        thinking.textContent = `Request failed: ${err}`;
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    });
+  </script>
+</body>
+</html>
