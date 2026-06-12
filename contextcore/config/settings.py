@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     langsmith_api_key: str = ""
     langsmith_project: str = "contextcore"
     mlflow_tracking_uri: str = "http://localhost:5000"
+    agentops_api_key: str = ""
 
 
 @lru_cache

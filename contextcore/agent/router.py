@@ -3,6 +3,7 @@
 from __future__ import annotations
 import json
 import anthropic
+import agentops
 from contextcore.config import get_settings
 
 DECOMPOSE_PROMPT = """You are a query planning assistant.
@@ -11,6 +12,10 @@ Given the user query, output a JSON object with:
   - "source_hint": one of ["internal_docs", "database", "web", "mixed"]
 
 Respond ONLY with valid JSON. No markdown, no explanation."""
+
+_settings = get_settings()
+if _settings.agentops_api_key:
+    agentops.init(api_key=_settings.agentops_api_key, default_tags=["contextcore"])
 
 
 def decompose_query(query: str) -> dict:
