@@ -15,12 +15,12 @@ def retrieve(query: str, top_k: int = 10, rerank_top: int = 5) -> list[dict]:
     s = get_settings()
     client: QdrantClient = get_client()
     query_vec = embed_texts([query])[0]
-    results = client.search(
+    results = client.query_points(
         collection_name=s.qdrant_collection,
-        query_vector=query_vec,
+        query=query_vec,
         limit=top_k,
         with_payload=True,
-    )
+    ).points
     pairs = [(query, r.payload.get("text", "")) for r in results]
     scores = _reranker.predict(pairs)
     ranked = sorted(zip(results, scores), key=lambda x: x[1], reverse=True)[:rerank_top]
